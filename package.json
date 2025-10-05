@@ -1,0 +1,19 @@
+{
+  "name": "mini-chat",
+  "version": "1.0.0",
+  "description": "",
+  "main": "gemini-chat.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@langchain/core": "^0.3.78",
+    "@langchain/google-genai": "^0.2.18",
+    "dotenv": "^17.2.3",
+    "langchain": "^0.3.35"
+  }
+}
