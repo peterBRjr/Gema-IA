@@ -8,14 +8,10 @@ import * as readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { Tool } from "@langchain/core/tools";
-
+// Importação adicional para melhor prática
+import { ToolMessage } from "@langchain/core/messages";
 
 // --- 1. DEFINIÇÃO DA FUNÇÃO (TOOL) ---
-
-/**
- * Simula a obtenção de uma variável "idade" de uma fonte externa.
- * O modelo só chama esta função quando o usuário perguntar sobre "idade".
- */
 class ObterIdadeAtualTool extends Tool {
   name = "obter_idade_atual";
   description = "Retorna a idade atual de uma pessoa ou entidade. Use esta ferramenta quando o usuário perguntar sobre 'minha idade', 'sua idade' ou 'qual a idade'.";
@@ -25,11 +21,6 @@ class ObterIdadeAtualTool extends Tool {
     properties: {},
   };
 
-  /**
-   * O método principal de execução da Tool.
-   * @param {string} input - Argumentos da função (não utilizados neste exemplo).
-   * @returns {Promise<string>} O valor da idade como uma string.
-   */
   async _call(input) {
     const idade = 30; 
     console.log(`\n*** TOOL EXECUTADA: Idade retornada: ${idade} ***\n`);
@@ -57,18 +48,14 @@ const memory = new BufferMemory({
   returnMessages: true,
 });
 
-// A Chain principal que conecta Prompt -> Modelo com Tools
 const chain = RunnableSequence.from([
   {
-    input: (i) => i.input, // Passa a entrada do usuário
-    chat_history: async (_) => (await memory.loadMemoryVariables({})).chat_history, // Carrega o histórico
+    input: (i) => i.input,
+    chat_history: async (_) => (await memory.loadMemoryVariables({})).chat_history,
   },
   prompt,
   modelWithTools,
 ]);
-
-
-// --- 3. LÓGICA DO CHAT (LOOP PRINCIPAL) ---
 
 startChat();
 
@@ -97,60 +84,45 @@ async function startChat() {
       }
 
       try {
-        // Objeto que contém a entrada do usuário
         const inputs = { input: userInput };
-
-        // 1. CHAMA O MODELO PELA PRIMEIRA VEZ
+        
         let response = await chain.invoke(inputs);
         
-        // 2. VERIFICA SE O MODELO QUER CHAMAR UMA FUNÇÃO (TOOL)
         if (response.tool_calls && response.tool_calls.length > 0) {
-          
           console.log("\n*** Gema solicitou uma Chamada de Função... ***");
           
           const toolOutputs = [];
 
-          // Itera sobre as chamadas de função solicitadas pelo modelo
           for (const call of response.tool_calls) {
             const toolToRun = tools.find((tool) => tool.name === call.name);
             
             if (toolToRun) {
-              // Executa a função localmente
               const output = await toolToRun.call(call.args);
               
-              // Adiciona o resultado da função para enviar de volta ao modelo
-              toolOutputs.push({
-                tool: call.name,
-                toolCallId: call.id,
-                output: output,
-              });
+              toolOutputs.push(new ToolMessage({
+                  content: output,
+                  name: call.name,
+                  toolCallId: call.id,
+              }));
             }
           }
           
-          // 3. PASSA O RESULTADO DA FUNÇÃO DE VOLTA PARA O MODELO
-          // Isso é feito como uma mensagem especial (FunctionMessage)
-          const secondResponse = await model.invoke(toolOutputs, {
-            // Passa a mensagem original do modelo + as saídas das tools
-            messages: [
-              ...(await memory.loadMemoryVariables({})).chat_history, 
-              response, // A mensagem da Gema solicitando a tool
-              ...toolOutputs, // As saídas das tools
-            ],
-          });
+          const secondResponse = await modelWithTools.invoke([
+            ...(await memory.loadMemoryVariables({})).chat_history, 
+            response, 
+            ...toolOutputs,
+          ]);
           
-          // A resposta final é a segunda resposta do modelo (que usa o resultado da tool)
           response = secondResponse;
           console.log("*** Resposta final baseada na Tool recebida. ***\n");
         }
 
-        // SALVA AS INTERAÇÕES NA MEMÓRIA
-        // A LangChain memory armazena a entrada do usuário e a resposta final do modelo
         await memory.saveContext(inputs, {
-            output: response.text,
+            output: response.content,
         });
 
         // IMPRIME A RESPOSTA FINAL
-        console.log(`Gema: ${response.text}`);
+        console.log(`Gema: ${response.content}`); // <<-- Alterado de 'response.text' para 'response.content'
         
       } catch (err) {
         console.error("Falha ao gerar resposta:", err?.message ?? err);
